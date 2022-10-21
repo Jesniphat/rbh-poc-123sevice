@@ -12,7 +12,7 @@ export class Pck7Service {
   public async genTextData(): Promise<any> {
     const secret = '69OWLBPR5UACQ8RHFFKY2K5KN7H79A55';
 
-    const cst = `764764000011139220829-AC-28491,000.09THBSCBrbh_blank@robinhood.co.th08855555551`;
+    const cst = `764764000011139220829-AC-28491,000.09THBKBANKrbh_blank@robinhood.co.th08855555551`;
     const sha256Hasher = crypto.createHmac('sha256', secret);
     const hash = sha256Hasher.update(cst).digest('hex');
 
@@ -22,10 +22,11 @@ export class Pck7Service {
         redirect_url: 'robinhoodth://payment/paywise/220829-AC-2849',
         notification_url:
           'https://b2b-apis-dev.alp-robinhood.com/payment/v1/payment/mobile-banking/confirm',
+        merchant_data: [{ shop_id: 'SCBRobinhoodShop001' }],
       },
       transaction: {
         merchant_reference: '220829-AC-2849',
-        preferred_agent: 'SCB',
+        preferred_agent: 'KBANK',
         amount: 1000.09,
         currency_code: 'THB',
         product_description: 'ROBINHOOD_FOOD',
@@ -41,7 +42,7 @@ export class Pck7Service {
     };
 
     const jsonBody: string = JSON.stringify(body);
-
+    console.log(jsonBody);
     const publicCerTxt = await this.readPublicCer();
     // create cert object
     const cert = forge.pki.certificateFromPem(publicCerTxt);
@@ -63,6 +64,44 @@ export class Pck7Service {
     );
 
     return await this.testCall2c2p(bodyEncrypted);
+  }
+
+  public async inqCheck() {
+    const secret = '69OWLBPR5UACQ8RHFFKY2K5KN7H79A55';
+    const cst = `764764000011139220829-AC-2849`;
+    const sha256Hasher = crypto.createHmac('sha256', secret);
+    const hash = sha256Hasher.update(cst).digest('hex');
+
+    const body = {
+      merchant_id: '764764000011139',
+      payment_code: '3202526194',
+      merchant_reference: '220829-AC-2849',
+      checksum: hash,
+    };
+
+    const jsonBody: string = JSON.stringify(body);
+    console.log(jsonBody);
+    const publicCerTxt = await this.readPublicCer();
+    // create cert object
+    const cert = forge.pki.certificateFromPem(publicCerTxt);
+    // create envelop data
+    const p7 = forge.pkcs7.createEnvelopedData();
+    // add certificate as recipient
+    p7.addRecipient(cert);
+    // set content
+    p7.content = forge.util.createBuffer();
+    p7.content.putString(jsonBody);
+
+    // encrypt
+    p7.encrypt();
+
+    // obtain encrypted data with DER format
+    const bytes = forge.asn1.toDer(p7.toAsn1()).getBytes();
+    const bodyEncrypted: string = Buffer.from(bytes, 'binary').toString(
+      'base64',
+    );
+
+    return await this.testCall2c2pInq(bodyEncrypted);
   }
 
   public async decodeResponse(respString: string) {
@@ -91,6 +130,29 @@ export class Pck7Service {
       this.httpService
         .post(
           'https://th-merchants-proxy-v1-uat-123.2c2p.com/api/merchantenc/start-deeplink-request',
+          { message: body },
+        )
+        .subscribe({
+          next: (resp) => {
+            console.log('call success');
+            console.log('data is -> ', resp.data);
+            resolve(resp.data);
+          },
+          error: (e) => {
+            console.log(e);
+            reject(
+              new HttpException(`Call 2c2p error`, HttpStatus.BAD_REQUEST),
+            );
+          },
+        });
+    });
+  }
+
+  private async testCall2c2pInq(body: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.httpService
+        .post(
+          'https://th-merchants-proxy-v1-uat-123.2c2p.com/api/merchantenc/get-deeplink-status',
           { message: body },
         )
         .subscribe({
