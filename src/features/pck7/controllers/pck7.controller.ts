@@ -10,6 +10,11 @@ export class Pck7Controller {
     return await this.pck7Service.genTextData();
   }
 
+  @Get('/inq')
+  public async genInq(): Promise<any> {
+    return await this.pck7Service.inqCheck();
+  }
+
   @Post('/decode')
   public async decodeText(@Body('message') message: string) {
     return await this.pck7Service.decodeResponse(message);
